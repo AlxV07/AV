@@ -1,0 +1,217 @@
+# AV - AutoVisualization
+
+## Overview
+
+AV is an AutoVisualization tool for text. It lets a user turn excerpts from a document into graph nodes and define relationships between those nodes.
+
+The first version is a fast, lightweight web interface with two resizable panels:
+
+1. A text editor and annotation interface.
+2. A node-and-path graph interface.
+
+The panels can be swapped so either the text or graph can appear on the left. The text and graph represent the same underlying document and must remain synchronized.
+
+## MVP goals
+
+The MVP should let a user:
+
+1. Enter or edit one document.
+2. Select a contiguous text range and create a node from it.
+3. Assign additional text ranges to an existing node.
+4. Remove assignments from selected text.
+5. Create directed paths between nodes.
+6. Hover over a text assignment or node to highlight its counterpart.
+7. Undo and redo graph and text operations.
+8. Save and load the document as JSON, with local browser persistence where practical.
+
+The MVP does not need collaboration, automatic semantic extraction, path labels, or advanced graph-layout controls.
+
+## Core data model
+
+The document text is the source of truth. Nodes refer to ranges in that text; they should not store independent copies of their text as authoritative data.
+
+```text
+Document
+  text: string
+  nodes: Node[]
+  paths: Path[]
+
+Node
+  id: string
+  assignments: Assignment[]
+
+Assignment
+  nodeId: string
+  start: integer   // inclusive character offset
+  end: integer     // exclusive character offset
+
+Path
+  id: string
+  sourceNodeId: string
+  targetNodeId: string
+```
+
+Character offsets are acceptable for v1. Use a diff-by-character operation when text is edited so assignments after an edit shift with the text. Assignments intersecting an edit should be adjusted where possible and otherwise marked for review or removed if their entire range was deleted.
+
+Assignments may overlap. A character can belong to more than one node, since the same phrase may represent multiple concepts. The interface should use colored outlines, underlines, or markers to show overlapping assignments rather than relying on multiple background colors.
+
+## Text editor
+
+The text panel has two explicit modes.
+
+### Text edit mode
+
+This behaves as a normal text editor. The user can enter, replace, and delete document text. Graph-edit keyboard shortcuts must not run in this mode.
+
+### Graph edit mode
+
+Text editing is disabled, but the user can select text and perform graph operations. The mode must have a visible toggle or indicator.
+
+In graph edit mode:
+
+- The user can select contiguous text ranges.
+- Clicking text does not place an editing cursor.
+- Selected ranges are visually marked with the colors assigned to their nodes.
+- A help hint should show the available keyboard shortcuts.
+
+### Text operations
+
+With a text range selected:
+
+- `n`: create a new node and assign the selected range to it.
+- `a`: assign the selected range to the currently selected node, if one exists.
+- `x`: remove all node assignments from the selected range. Delete any node that has no remaining assignments.
+
+Hovering over an assigned text range highlights its corresponding node. Hovering over a node highlights all of its assigned ranges.
+
+When an assignment is deleted because its node has no remaining ranges, any paths connected to that node must also be removed.
+
+## Graph tool
+
+Nodes are displayed as ovals containing the text assigned to them. Each assigned range appears on a separate line, ordered by its position in the document. Adjacent or overlapping ranges assigned to the same node may be merged for display.
+
+If a node has no displayable text, show a fallback label such as `Node 1`. Normally nodes without assignments should be deleted immediately.
+
+### Node selection
+
+- Clicking a node selects it and deselects any other node. Multi-selection is not required for the MVP.
+- The selected node has a clear visual state, such as a thicker outline or glow.
+- Clicking empty graph space or pressing `Escape` clears the selection.
+- The selected node is the target for the `a` text-assignment command.
+- `d` or `Delete` deletes the selected node and unassigns all of its text.
+
+### Path creation
+
+Paths are directed and unlabeled in the MVP.
+
+Use this simple prototype workflow:
+
+1. Click a source node to select it.
+2. Press `p` to enter path-creation mode.
+3. Click a destination node.
+
+The interface should visibly indicate the source node and path-creation mode. The resulting path runs from the source to the destination and must show direction with an arrowhead or equivalent indicator.
+
+Duplicate paths should not be created. Self-links are not required for the MVP. Press `Escape` to cancel path creation.
+
+Clicking a path selects it. Pressing `Delete` removes the selected path. Deleting a node also deletes every path directly connected to it.
+
+## Layout and interaction
+
+- The two panels are separated by an adjustable vertical divider.
+- The divider must support resizing by mouse or pointer input.
+- The panels can swap left/right positions without changing their state.
+- Graph layout may be automatic, but nodes must remain selectable and paths must remain visible.
+- The selected node, selected path, and hovered objects must have distinct visual states.
+- Keyboard shortcuts should be documented in the interface and should not conflict with normal text editing because they only apply in graph edit mode.
+
+## Undo and redo
+
+Undo and redo are required for the MVP. At minimum, the following operations must be reversible:
+
+- text edits
+- node creation
+- text assignment
+- assignment removal
+- node deletion
+- path creation
+- path deletion
+
+Undo should restore both the visible interface and the underlying document/graph state.
+
+## Persistence and file format
+
+The application should automatically preserve the current work locally where practical and provide JSON export/import.
+
+Example file format:
+
+```json
+{
+  "text": "Source document text",
+  "nodes": [
+    {
+      "id": "node-1",
+      "assignments": [
+        { "start": 0, "end": 12 }
+      ]
+    }
+  ],
+  "paths": [
+    {
+      "id": "path-1",
+      "sourceNodeId": "node-1",
+      "targetNodeId": "node-2"
+    }
+  ]
+}
+```
+
+Import validation should reject invalid node references, invalid ranges, duplicate IDs, and paths that refer to missing nodes.
+
+## Visual language
+
+Each node should receive a stable color. The same color should be used for:
+
+- its node outline
+- its assigned text markers
+- its hover and selection feedback where appropriate
+
+Because assignments may overlap, the implementation should support more than one visual indicator on the same text range. Exact visual treatment can be refined during UI implementation, but the relationship must remain discoverable.
+
+## Edge cases
+
+The implementation should define behavior for:
+
+- selecting empty text
+- assigning text when no node is selected
+- deleting part of an assigned range
+- editing text inside or across assigned ranges
+- overlapping assignments
+- deleting a node used by paths
+- importing malformed JSON
+- creating duplicate paths
+- swapping panels during an active selection
+
+Recommended behavior is to ignore invalid operations with a clear, non-blocking UI hint, preserve unaffected assignments, and remove paths automatically when their node is deleted.
+
+## Suggested implementation order
+
+1. Define the document, node, assignment, and path state model.
+2. Build the two-panel layout with resizing and swapping.
+3. Implement text edit mode and graph edit mode.
+4. Implement range selection and node creation/assignment/removal.
+5. Implement node rendering, selection, and hover synchronization.
+6. Implement directed path creation and deletion.
+7. Add undo/redo.
+8. Add local persistence and JSON import/export.
+9. Add edge-case handling, keyboard help, and accessibility checks.
+
+## Decisions deferred beyond the MVP
+
+- Path labels and relationship types.
+- Automatic node extraction from natural language.
+- Stable semantic anchors instead of character offsets.
+- Collaborative editing.
+- Multiple documents or workspaces.
+- Advanced graph layout and filtering.
+- Rich node metadata.
