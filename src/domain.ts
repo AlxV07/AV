@@ -76,8 +76,8 @@ export function deleteNode(workspace: Workspace, nodeId: string): Workspace {
 
 export function createPath(workspace: Workspace, sourceNodeId: string, targetNodeId: string, pathId: string): Workspace {
   if (sourceNodeId === targetNodeId || !workspace.nodes.some(node => node.id === sourceNodeId) || !workspace.nodes.some(node => node.id === targetNodeId)) return clone(workspace)
-  if (workspace.paths.some(path => path.sourceNodeId === sourceNodeId && path.targetNodeId === targetNodeId)) return clone(workspace)
-  return { ...clone(workspace), paths: [...workspace.paths, { id: pathId, sourceNodeId, targetNodeId, style: 'directed-way1' }] }
+  if (workspace.paths.some(path => (path.sourceNodeId === sourceNodeId && path.targetNodeId === targetNodeId) || (path.sourceNodeId === targetNodeId && path.targetNodeId === sourceNodeId))) return clone(workspace)
+  return { ...clone(workspace), paths: [...workspace.paths, { id: pathId, sourceNodeId, targetNodeId, style: 'directed-way1', color: '#708792' }] }
 }
 
 export function setPathStyle(workspace: Workspace, pathId: string, style: PathStyle): Workspace {

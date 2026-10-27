@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from 'react'
-import { Download, FileUp, Moon, PanelLeft, Redo2, Sun, Undo2, X } from 'lucide-react'
+import { Download, FileUp, Minus, Moon, PanelLeft, Plus, Redo2, Sun, Undo2, X } from 'lucide-react'
 import type { Mode, NodeData, SelectionRange, Workspace } from './types'
 import { addNode, assignRange as assignWorkspaceRange, clone, createPath as createWorkspacePath, deleteNode as deleteWorkspaceNode, deletePath as deleteWorkspacePath, removeRange as removeWorkspaceRange, setPathStyle, shiftAssignments, uniqueNodeColor, validateWorkspace } from './domain'
 
@@ -31,6 +31,8 @@ export default function App() {
   useEffect(() => { localStorage.setItem('av-workspace', JSON.stringify(workspace)) }, [workspace])
   useEffect(() => { localStorage.setItem('av-theme', theme) }, [theme])
   useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 2600); return () => clearTimeout(t) }, [notice])
+  useEffect(() => { if (mode === 'edit') { setPathSource(null); setRange(null) } }, [mode])
+  useEffect(() => { if (selectedPath && pathSource) setPathSource(null) }, [selectedPath, pathSource])
 
   const update = (next: Workspace, record = true) => { if (record) { setHistory(h => [...h.slice(-39), clone(workspace)]); setFuture([]) }; setWorkspace(next) }
   const notify = (message: string) => setNotice(message)
@@ -56,6 +58,8 @@ export default function App() {
   const handleTextChange = (value: string) => update(shiftAssignments(workspace, workspace.text, value))
   const beginGeometryEdit = () => { if (!geometryEditStarted.current) { setHistory(h => [...h.slice(-39), clone(workspace)]); setFuture([]); geometryEditStarted.current = true } }
   const updateNodeGeometry = (id: string, geometry: Partial<Pick<NodeData, 'x' | 'y' | 'width' | 'height'>>) => setWorkspace(current => ({ ...current, nodes: current.nodes.map(node => node.id === id ? { ...node, ...geometry } : node) }))
+  const updateNodeColor = (id: string, color: string) => update({ ...workspace, nodes: workspace.nodes.map(node => node.id === id ? { ...node, color } : node) })
+  const updatePathColor = (id: string, color: string) => update({ ...workspace, paths: workspace.paths.map(path => path.id === id ? { ...path, color } : path) })
   const updateGraphView = (view: { x: number; y: number; scale?: number }) => setWorkspace(current => ({ ...current, view }))
   const focusGraphNode = (id: string) => window.dispatchEvent(new CustomEvent('av-focus-node', { detail: id }))
   const endGeometryEdit = () => { geometryEditStarted.current = false }
@@ -98,20 +102,20 @@ export default function App() {
 
   return <div className={`app theme-${theme}`} onKeyDown={handleKey} tabIndex={0}>
     <header className="topbar">
-      <div className="brand"><strong>AnnotationVisualized</strong></div>
+      <div className="brand"><div className="brand-copy"><strong>AnnotationVisualized</strong><a href="https://alxv07.github.io" target="_blank" rel="noreferrer">alxv07.github.io</a></div></div>
       <div className="toolbar-group"><button title="Undo" onClick={undo} disabled={!history.length}><Undo2 size={16} /></button><button title="Redo" onClick={redo} disabled={!future.length}><Redo2 size={16} /></button></div>
       <div className="toolbar-group right"><label className="icon-button" title="Import JSON"><FileUp size={16} /><input type="file" accept="application/json" onChange={e => importJson(e.target.files?.[0])} /></label><button title="Export JSON" onClick={exportJson}><Download size={16} /></button><button className="theme-toggle" title={`Switch to Solarized ${theme === 'dark' ? 'Light' : 'Dark'}`} aria-label={`Switch to Solarized ${theme === 'dark' ? 'Light' : 'Dark'}`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</button></div>
     </header>
     {notice && <div className="noticebar">{notice}</div>}
     <main className="workspace" style={{ gridTemplateColumns: `${divider}% 6px 1fr` }}>
-      {orderedPanels.map((panel, index) => <div key={panel} className="panel-wrap">{panel === 'text' ? <TextPanel mode={mode} setMode={setMode} workspace={workspace} selectedNode={selectedNode} hoveredNode={hoveredNode} setHoveredNode={setHoveredNode} setSelectedNode={setSelectedNode} setSelectedPath={setSelectedPath} focusGraphNode={focusGraphNode} surfaceRef={surfaceRef} textRef={textRef} onChange={handleTextChange} onSelect={captureSelection} /> : <GraphPanelInteractive workspace={workspace} selectedNode={selectedNode} selectedPath={selectedPath} pathSource={pathSource} highlightedNodes={highlightedNodes} setSelectedNode={setSelectedNode} setSelectedPath={setSelectedPath} setHoveredNode={setHoveredNode} createPath={(target) => { if (!pathSource || pathSource === target) return notify('Choose a different destination node.'); const next = createWorkspacePath(workspace, pathSource, target, uid('path')); if (next.paths.length === workspace.paths.length) return notify('That path already exists.'); update(next); setPathSource(null); notify('Path created.') }} deleteNode={deleteNode} beginGeometryEdit={beginGeometryEdit} updateNodeGeometry={updateNodeGeometry} endGeometryEdit={endGeometryEdit} updateGraphView={updateGraphView} />}</div>)}
+      {orderedPanels.map((panel, index) => <div key={panel} className="panel-wrap">{panel === 'text' ? <TextPanel mode={mode} setMode={setMode} workspace={workspace} selectedNode={selectedNode} hoveredNode={hoveredNode} selectionRange={range} setHoveredNode={setHoveredNode} setSelectedNode={setSelectedNode} setSelectedPath={setSelectedPath} focusGraphNode={focusGraphNode} surfaceRef={surfaceRef} textRef={textRef} onChange={handleTextChange} onSelect={captureSelection} /> : <GraphPanelInteractive mode={mode} workspace={workspace} selectedNode={selectedNode} selectedPath={selectedPath} pathSource={pathSource} highlightedNodes={highlightedNodes} setSelectedNode={setSelectedNode} setSelectedPath={setSelectedPath} setPathSource={setPathSource} setHoveredNode={setHoveredNode} createPath={(target) => { if (!pathSource || pathSource === target) return notify('Choose a different destination node.'); const next = createWorkspacePath(workspace, pathSource, target, uid('path')); if (next.paths.length === workspace.paths.length) return notify('That path already exists.'); update(next); setPathSource(null); notify('Path created.') }} deleteNode={deleteNode} beginGeometryEdit={beginGeometryEdit} updateNodeGeometry={updateNodeGeometry} endGeometryEdit={endGeometryEdit} updateGraphView={updateGraphView} updateNodeColor={updateNodeColor} updatePathColor={updatePathColor} />}</div>)}
       <div className="resize-handle" onPointerDown={event => { const startX = event.clientX, start = divider; const move = (e: PointerEvent) => setDivider(Math.max(25, Math.min(72, start + ((e.clientX - startX) / window.innerWidth) * 100))); const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }; window.addEventListener('pointermove', move); window.addEventListener('pointerup', up) }} />
     </main>
     <footer><span>{workspace.nodes.length} nodes</span><span>{workspace.paths.length} paths</span><span>{workspace.text.length} characters</span><button onClick={() => setLeftPanel(p => p === 'text' ? 'graph' : 'text')}><PanelLeft size={14} /> Swap panels</button></footer>
   </div>
 }
 
-function TextPanel({ mode, setMode, workspace, selectedNode, hoveredNode, setHoveredNode, setSelectedNode, setSelectedPath, focusGraphNode, surfaceRef, textRef, onChange, onSelect }: { mode: Mode; setMode: (mode: Mode) => void; workspace: Workspace; selectedNode: string | null; hoveredNode: string | null; setHoveredNode: (id: string | null) => void; setSelectedNode: (id: string | null) => void; setSelectedPath: (id: string | null) => void; focusGraphNode: (id: string) => void; surfaceRef: RefObject<HTMLDivElement | null>; textRef: RefObject<HTMLTextAreaElement | null>; onChange: (value: string) => void; onSelect: () => void }) {
+function TextPanel({ mode, setMode, workspace, selectedNode, hoveredNode, selectionRange, setHoveredNode, setSelectedNode, setSelectedPath, focusGraphNode, surfaceRef, textRef, onChange, onSelect }: { mode: Mode; setMode: (mode: Mode) => void; workspace: Workspace; selectedNode: string | null; hoveredNode: string | null; selectionRange: SelectionRange | null; setHoveredNode: (id: string | null) => void; setSelectedNode: (id: string | null) => void; setSelectedPath: (id: string | null) => void; focusGraphNode: (id: string) => void; surfaceRef: RefObject<HTMLDivElement | null>; textRef: RefObject<HTMLTextAreaElement | null>; onChange: (value: string) => void; onSelect: () => void }) {
   const boundaries = new Set([0, workspace.text.length]); workspace.nodes.forEach(n => n.assignments.forEach(a => { boundaries.add(a.start); boundaries.add(a.end) })); const points = [...boundaries].sort((a, b) => a - b)
   useEffect(() => {
     const node = workspace.nodes.find(candidate => candidate.id === selectedNode)
@@ -124,10 +128,10 @@ function TextPanel({ mode, setMode, workspace, selectedNode, hoveredNode, setHov
       textRef.current.setSelectionRange(firstAssignment.start, firstAssignment.start)
     }
   }, [mode, selectedNode, surfaceRef, textRef, workspace.nodes])
-  return <section className="panel text-panel"><div className="panel-heading"><div><h2>Text</h2></div><div className="mode-switch" aria-label="Text mode"><button className={mode === 'edit' ? 'active' : ''} onClick={() => setMode('edit')}>Edit</button><span>|</span><button className={mode === 'graph' ? 'active' : ''} onClick={() => setMode('graph')}>Annotate</button></div></div>{mode === 'edit' ? <textarea ref={textRef} className="editor edit-surface" value={workspace.text} onChange={e => onChange(e.target.value)} spellCheck /> : <div ref={surfaceRef} className="text-surface annotate-surface" onMouseUp={onSelect} onKeyUp={onSelect} tabIndex={0}>{points.slice(0, -1).map((start, i) => { const end = points[i + 1], ids = workspace.nodes.filter(n => n.assignments.some(a => a.start <= start && a.end >= end)).map(n => n.id), boxShadows = ids.map((id, index) => `inset 0 -${2 + index * 3}px 0 ${workspace.nodes.find(n => n.id === id)?.color}`).join(', '), active = ids.includes(selectedNode || '') || ids.includes(hoveredNode || ''); return <span data-start={start} key={`${start}-${end}`} className={`text-fragment ${ids.length ? 'marked' : ''} ${active ? 'active-assignment' : ''}`} style={{ '--marker-colors': workspace.nodes.find(n => n.id === ids[0])?.color, boxShadow: boxShadows || undefined } as CSSProperties} onMouseEnter={() => ids[0] && setHoveredNode(ids[0])} onMouseLeave={() => setHoveredNode(null)} onClick={() => { if (ids[0]) { setSelectedNode(ids[0]); setSelectedPath(null); focusGraphNode(ids[0]) } }}>{workspace.text.slice(start, end)}</span> })}</div>}<div className="text-hint">{mode === 'graph' ? <><kbd>N</kbd> new node <kbd>A</kbd> assign <kbd>X</kbd> remove</> : 'Switch to Annotate to mark up the document.'}</div></section>
+  return <section className="panel text-panel"><div className="panel-heading"><div><h2>Document</h2></div><div className="mode-switch" aria-label="Text mode"><button className={mode === 'edit' ? 'active' : ''} onClick={() => setMode('edit')}>Edit</button><span>|</span><button className={mode === 'graph' ? 'active' : ''} onClick={() => setMode('graph')}>Annotate</button></div></div>{mode === 'edit' ? <textarea ref={textRef} className="editor edit-surface" value={workspace.text} onChange={e => onChange(e.target.value)} spellCheck /> : <div ref={surfaceRef} className="text-surface annotate-surface" onMouseUp={onSelect} onKeyUp={onSelect} tabIndex={0}>{points.slice(0, -1).map((start, i) => { const end = points[i + 1], ids = workspace.nodes.filter(n => n.assignments.some(a => a.start <= start && a.end >= end)).map(n => n.id), boxShadows = ids.map((id, index) => `inset 0 -${2 + index * 3}px 0 ${workspace.nodes.find(n => n.id === id)?.color}`).join(', '), active = ids.includes(selectedNode || '') || ids.includes(hoveredNode || ''); return <span data-start={start} key={`${start}-${end}`} className={`text-fragment ${ids.length ? 'marked' : ''} ${active ? 'active-assignment' : ''}`} style={{ '--marker-colors': workspace.nodes.find(n => n.id === ids[0])?.color, boxShadow: boxShadows || undefined } as CSSProperties} onMouseEnter={() => ids[0] && setHoveredNode(ids[0])} onMouseLeave={() => setHoveredNode(null)} onClick={() => { if (ids[0]) { setSelectedNode(ids[0]); setSelectedPath(null); focusGraphNode(ids[0]) } }}>{workspace.text.slice(start, end)}</span> })}</div>}<div className="text-hint">{mode === 'graph' ? selectionRange ? <><kbd>N</kbd> new node <kbd>A</kbd> assign to selected node <kbd>X</kbd> unassign from all nodes</> : 'Highlight text to annotate.' : 'Edit document.'}</div></section>
 }
 
-function GraphPanelInteractive({ workspace, selectedNode, selectedPath, pathSource, highlightedNodes, setSelectedNode, setSelectedPath, setHoveredNode, createPath, deleteNode, beginGeometryEdit, updateNodeGeometry, endGeometryEdit, updateGraphView }: { workspace: Workspace; selectedNode: string | null; selectedPath: string | null; pathSource: string | null; highlightedNodes: Set<string | null>; setSelectedNode: (id: string | null) => void; setSelectedPath: (id: string | null) => void; setHoveredNode: (id: string | null) => void; createPath: (target: string) => void; deleteNode: (id: string) => void; beginGeometryEdit: () => void; updateNodeGeometry: (id: string, geometry: Partial<Pick<NodeData, 'x' | 'y' | 'width' | 'height'>>) => void; endGeometryEdit: () => void; updateGraphView: (view: { x: number; y: number; scale?: number }) => void }) {
+function GraphPanelInteractive({ mode, workspace, selectedNode, selectedPath, pathSource, highlightedNodes, setSelectedNode, setSelectedPath, setPathSource, setHoveredNode, createPath, deleteNode, beginGeometryEdit, updateNodeGeometry, endGeometryEdit, updateGraphView, updateNodeColor, updatePathColor }: { mode: Mode; workspace: Workspace; selectedNode: string | null; selectedPath: string | null; pathSource: string | null; highlightedNodes: Set<string | null>; setSelectedNode: (id: string | null) => void; setSelectedPath: (id: string | null) => void; setPathSource: (id: string | null) => void; setHoveredNode: (id: string | null) => void; createPath: (target: string) => void; deleteNode: (id: string) => void; beginGeometryEdit: () => void; updateNodeGeometry: (id: string, geometry: Partial<Pick<NodeData, 'x' | 'y' | 'width' | 'height'>>) => void; endGeometryEdit: () => void; updateGraphView: (view: { x: number; y: number; scale?: number }) => void; updateNodeColor: (id: string, color: string) => void; updatePathColor: (id: string, color: string) => void }) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const panRef = useRef<{ startX: number; startY: number; originX: number; originY: number; x: number; y: number } | null>(null)
   const [pan, setPan] = useState({ x: workspace.view?.x ?? 0, y: workspace.view?.y ?? 0 })
@@ -136,6 +140,7 @@ function GraphPanelInteractive({ workspace, selectedNode, selectedPath, pathSour
   const fallbackLayout = (index: number) => ({ x: 4 + (index % 3) * 31, y: 6 + Math.floor(index / 3) * 26, width: 24, height: 24 })
   const positions = workspace.nodes.map((node, index) => ({ node, ...(node.x === undefined ? fallbackLayout(index) : { x: node.x, y: node.y ?? fallbackLayout(index).y, width: node.width ?? 24, height: node.height ?? 24 }) }))
   const pos = new Map(positions.map(p => [p.node.id, p]))
+  const selectedPathStyle = workspace.paths.find(path => path.id === selectedPath)?.style
   useEffect(() => {
     const svg = canvasRef.current?.querySelector<SVGSVGElement>('.edges')
     if (!svg) return
@@ -151,14 +156,23 @@ function GraphPanelInteractive({ workspace, selectedNode, selectedPath, pathSour
       const style = workspace.paths[index]?.style ?? 'directed-way1'
       const path = workspace.paths[index], source = path && pos.get(path.sourceNodeId), target = path && pos.get(path.targetNodeId)
       if (!source || !target) return
+      line.style.color = path?.color ?? ''
+      const markerId = `av-arrow-${path.id}`
+      let pathMarker = svg.querySelector<SVGMarkerElement>(`[data-path-marker="${path.id}"]`)
+      if (!pathMarker) {
+        pathMarker = document.createElementNS('http://www.w3.org/2000/svg', 'marker')
+        pathMarker.setAttribute('data-path-marker', path.id); pathMarker.setAttribute('id', markerId); pathMarker.setAttribute('markerWidth', '4'); pathMarker.setAttribute('markerHeight', '4'); pathMarker.setAttribute('viewBox', '0 0 4 4'); pathMarker.setAttribute('refX', '3.4'); pathMarker.setAttribute('refY', '2'); pathMarker.setAttribute('orient', 'auto-start-reverse'); pathMarker.setAttribute('markerUnits', 'strokeWidth')
+        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path'); arrow.setAttribute('d', 'M 0 0 L 4 2 L 0 4 z'); arrow.setAttribute('stroke-width', '.15'); pathMarker.appendChild(arrow); svg.querySelector('defs')?.appendChild(pathMarker)
+      }
+      const arrow = pathMarker.querySelector('path'); arrow?.setAttribute('fill', path?.color ?? '#8fb9bd'); arrow?.setAttribute('stroke', path?.color ?? '#8fb9bd')
       const sourceCenter = { x: source.x + source.width / 2, y: source.y + source.height / 2 }, targetCenter = { x: target.x + target.width / 2, y: target.y + target.height / 2 }
       const pointOnEdge = (from: typeof source, to: typeof target) => { const dx = (to.x + to.width / 2) - (from.x + from.width / 2), dy = (to.y + to.height / 2) - (from.y + from.height / 2), scale = 0.5 / Math.max(Math.abs(dx / from.width), Math.abs(dy / from.height)); return { x: from.x + from.width / 2 + dx * scale, y: from.y + from.height / 2 + dy * scale } }
       const start = pointOnEdge(source, target), end = pointOnEdge(target, source), midX = (sourceCenter.x + targetCenter.x) / 2, midY = (sourceCenter.y + targetCenter.y) / 2, d = `M ${start.x} ${start.y} Q ${midX} ${midY} ${end.x} ${end.y}`
       line.setAttribute('d', d); hits?.[index]?.setAttribute('d', d)
       line.removeAttribute('marker-start'); line.removeAttribute('marker-end'); line.removeAttribute('stroke-dasharray')
-      if (style === 'directed-way1') line.setAttribute('marker-end', 'url(#av-arrow)')
-      if (style === 'directed-way2') line.setAttribute('marker-start', 'url(#av-arrow)')
-      if (style === 'bidirectional') { line.setAttribute('marker-start', 'url(#av-arrow)'); line.setAttribute('marker-end', 'url(#av-arrow)') }
+      if (style === 'directed-way1') line.setAttribute('marker-end', `url(#${markerId})`)
+      if (style === 'directed-way2') line.setAttribute('marker-start', `url(#${markerId})`)
+      if (style === 'bidirectional') { line.setAttribute('marker-start', `url(#${markerId})`); line.setAttribute('marker-end', `url(#${markerId})`) }
       if (style === 'undirected-dash') line.setAttribute('stroke-dasharray', '2 1')
     })
   }, [workspace.paths, positions])
@@ -226,6 +240,64 @@ function GraphPanelInteractive({ workspace, selectedNode, selectedPath, pathSour
   }
   const movePan = (event: ReactPointerEvent<HTMLDivElement>) => { if (panRef.current) { const next = { x: panRef.current.originX + event.clientX - panRef.current.startX, y: panRef.current.originY + event.clientY - panRef.current.startY }; setPan(next); panRef.current = { ...panRef.current, x: next.x, y: next.y } } }
   const endPan = () => { if (panRef.current) updateGraphView({ x: panRef.current.x, y: panRef.current.y, scale }); panRef.current = null }
+  const zoomBy = (factor: number) => {
+    const nextScale = Math.max(.35, Math.min(3, scale * factor))
+    if (nextScale === scale) return
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const cursorX = rect.width / 2, cursorY = rect.height / 2
+    const worldX = (cursorX - pan.x) / scale, worldY = (cursorY - pan.y) / scale
+    const nextPan = { x: cursorX - worldX * nextScale, y: cursorY - worldY * nextScale }
+    setScale(nextScale); setPan(nextPan); updateGraphView({ ...nextPan, scale: nextScale })
+  }
+  useEffect(() => {
+    const heading = canvasRef.current?.parentElement?.querySelector('.panel-heading')
+    if (!heading) return
+    heading.querySelector('.node-count')?.remove()
+    const actions = document.createElement('div')
+    actions.className = 'graph-heading-actions zoom-controls'
+    ;[['Zoom in', '+', 1.1], ['Zoom out', '−', .9]].forEach(([title, label, factor]) => {
+      const button = document.createElement('button')
+      button.type = 'button'; button.title = String(title); button.setAttribute('aria-label', String(title)); button.textContent = String(label)
+      button.addEventListener('click', () => zoomBy(Number(factor)))
+      actions.appendChild(button)
+    })
+    heading.appendChild(actions)
+    return () => actions.remove()
+  }, [scale, pan, updateGraphView])
+  useEffect(() => {
+    const hint = canvasRef.current?.parentElement?.querySelector('.graph-hint')
+    const node = workspace.nodes.find(candidate => candidate.id === selectedNode)
+    const slot = hint?.querySelector('.node-color-slot')
+    if (!hint || !node || !slot || pathSource) return
+    const section = document.createElement('label')
+    section.className = 'node-color-control'
+    section.textContent = 'Color'
+    const input = document.createElement('input')
+    input.type = 'color'; input.value = node.color; input.setAttribute('aria-label', 'Node color')
+    input.addEventListener('change', () => updateNodeColor(node.id, input.value))
+    section.appendChild(input); slot.appendChild(section)
+    return () => section.remove()
+  }, [selectedNode, pathSource, workspace.nodes, updateNodeColor])
+  useEffect(() => {
+    const button = canvasRef.current?.parentElement?.querySelector<HTMLButtonElement>('.delete-path')
+    const title = button?.querySelector('strong')
+    const createdSlot = button && title && !button.querySelector('.path-color-slot') ? document.createElement('span') : null
+    if (createdSlot && title) { createdSlot.className = 'path-color-slot'; title.after(createdSlot) }
+    const slot = button?.querySelector('.path-color-slot')
+    const path = workspace.paths.find(candidate => candidate.id === selectedPath)
+    if (!button || !path || !slot) return
+    const section = document.createElement('label')
+    section.className = 'path-color-control'
+    section.textContent = 'Color'
+    const input = document.createElement('input')
+    input.type = 'color'; input.value = path.color || '#708792'; input.setAttribute('aria-label', 'Path color')
+    section.addEventListener('click', event => event.stopPropagation())
+    section.addEventListener('pointerdown', event => event.stopPropagation())
+    input.addEventListener('change', () => updatePathColor(path.id, input.value))
+    section.appendChild(input); slot.appendChild(section)
+    return () => { section.remove(); createdSlot?.remove() }
+  }, [selectedPath, workspace.paths, updatePathColor])
   const startNodeGesture = (event: ReactPointerEvent<HTMLElement>, node: NodeData, resize: boolean) => {
     event.stopPropagation(); event.preventDefault()
     const rect = canvasRef.current?.getBoundingClientRect(); if (!rect) return
@@ -241,5 +313,5 @@ function GraphPanelInteractive({ workspace, selectedNode, selectedPath, pathSour
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
 
-  return <section className="panel graph-panel"><div className="panel-heading"><div><h2>Graph</h2></div>{pathSource ? <span className="path-pill">PATH MODE · CHOOSE DESTINATION</span> : <span className="node-count">{workspace.nodes.length} {workspace.nodes.length === 1 ? 'node' : 'nodes'}</span>}</div><div ref={canvasRef} className="graph-canvas" style={{ backgroundPosition: `${pan.x}px ${pan.y}px` }} onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onClick={() => { setSelectedNode(null); setSelectedPath(null) }}><div className="graph-layer" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}><svg className="edges" viewBox="0 0 100 100" preserveAspectRatio="none">{workspace.paths.map(path => { const s = pos.get(path.sourceNodeId), t = pos.get(path.targetNodeId); if (!s || !t) return null; const selected = selectedPath === path.id, sx = s.x + s.width / 2, sy = s.y + s.height / 2, tx = t.x + t.width / 2, ty = t.y + t.height / 2; return <g key={path.id} onClick={e => { e.stopPropagation(); setSelectedPath(path.id); setSelectedNode(null) }} className={selected ? 'edge-selected' : ''}><path className="edge-hit" d={`M ${sx} ${sy} C ${(sx + tx) / 2} ${sy}, ${(sx + tx) / 2} ${ty}, ${tx} ${ty}`} /><path className="edge-line" markerEnd="url(#arrow)" d={`M ${sx} ${sy} C ${(sx + tx) / 2} ${sy}, ${(sx + tx) / 2} ${ty}, ${tx} ${ty}`} /></g>})}<defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="currentColor" /></marker></defs></svg>{positions.map(({ node, x, y, width, height }) => <div key={node.id} className={`node ${selectedNode === node.id ? 'selected' : ''} ${pathSource === node.id ? 'path-source' : ''} ${highlightedNodes.has(node.id) ? 'highlighted' : ''}`} style={{ left: `${x}%`, top: `${y}%`, width: `${width}%`, height: `${height}%`, '--node-color': node.color } as CSSProperties} onPointerDown={event => startNodeGesture(event, node, false)} onClick={event => { event.stopPropagation(); if (pathSource) createPath(node.id); else { setSelectedNode(node.id); setSelectedPath(null) } }} onMouseEnter={() => setHoveredNode(node.id)} onMouseLeave={() => setHoveredNode(null)}><div className="node-title">{node.assignments.length ? node.assignments.map(a => workspace.text.slice(a.start, a.end)).join(' · ') : 'Unassigned node'}</div><span className="resize-grip" onPointerDown={event => startNodeGesture(event, node, true)} /><button className="node-delete" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); deleteNode(node.id) }}><X size={13} /></button></div>)}</div></div><div className="graph-hint">{selectedNode ? <><span className="selection-chip" style={{ background: workspace.nodes.find(n => n.id === selectedNode)?.color }} />Node selected · press <kbd>P</kbd> to connect</> : 'Drag nodes to move, use the corner grip to resize, or drag the grid to pan'}{selectedPath && <button className="delete-path" onClick={() => setSelectedPath(null)}>Path selected · press Delete</button>}</div></section>
+  return <section className="panel graph-panel"><div className="panel-heading"><div><h2>Graph</h2></div>{pathSource ? <span className="path-pill">PATH MODE · CHOOSE DESTINATION</span> : <span className="node-count">{workspace.nodes.length} {workspace.nodes.length === 1 ? 'node' : 'nodes'}</span>}</div><div ref={canvasRef} className="graph-canvas" style={{ backgroundPosition: `${pan.x}px ${pan.y}px` }} onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onClick={() => { setSelectedNode(null); setSelectedPath(null) }}><div className="graph-layer" style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}><svg className="edges" viewBox="0 0 100 100" preserveAspectRatio="none">{workspace.paths.map(path => { const s = pos.get(path.sourceNodeId), t = pos.get(path.targetNodeId); if (!s || !t) return null; const selected = selectedPath === path.id, sx = s.x + s.width / 2, sy = s.y + s.height / 2, tx = t.x + t.width / 2, ty = t.y + t.height / 2; return <g key={path.id} onClick={e => { e.stopPropagation(); setSelectedPath(path.id); setSelectedNode(null) }} className={selected ? 'edge-selected' : ''}><path className="edge-hit" d={`M ${sx} ${sy} C ${(sx + tx) / 2} ${sy}, ${(sx + tx) / 2} ${ty}, ${tx} ${ty}`} /><path className="edge-line" markerEnd="url(#arrow)" d={`M ${sx} ${sy} C ${(sx + tx) / 2} ${sy}, ${(sx + tx) / 2} ${ty}, ${tx} ${ty}`} /></g>})}<defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="currentColor" /></marker></defs></svg>{positions.map(({ node, x, y, width, height }) => <div key={node.id} className={`node ${selectedNode === node.id ? 'selected' : ''} ${pathSource === node.id ? 'path-source' : ''} ${highlightedNodes.has(node.id) ? 'highlighted' : ''}`} style={{ left: `${x}%`, top: `${y}%`, width: `${width}%`, height: `${height}%`, '--node-color': node.color } as CSSProperties} onPointerDown={event => startNodeGesture(event, node, false)} onClick={event => { event.stopPropagation(); if (pathSource) createPath(node.id); else { setSelectedNode(node.id); setSelectedPath(null) } }} onMouseEnter={() => setHoveredNode(node.id)} onMouseLeave={() => setHoveredNode(null)}><div className="node-title">{node.assignments.length ? node.assignments.map(a => workspace.text.slice(a.start, a.end)).join(' · ') : 'Unassigned node'}</div><span className="resize-grip" onPointerDown={event => startNodeGesture(event, node, true)} /><button className="node-delete" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); deleteNode(node.id) }}><X size={13} /></button></div>)}</div></div><div className="graph-hint">{mode === 'edit' ? 'Switch to Annotate mode to edit nodes and paths.' : pathSource ? <><strong>Creating path from</strong> <span className="path-color-chip" style={{ background: workspace.nodes.find(n => n.id === pathSource)?.color }} aria-label="Source node color" /> · select target node <span>· <kbd>Esc</kbd> cancel path creation</span></> : selectedNode ? <><span className="selection-chip" style={{ background: workspace.nodes.find(n => n.id === selectedNode)?.color }} /><strong>Node selected</strong><span className="node-color-slot" /> · press <kbd>P</kbd> to create a path</> : 'Click to select nodes and paths; Drag to move nodes'}{selectedPath && <button className="delete-path" onClick={() => setSelectedPath(null)}><strong>Path selected</strong> · <kbd className={selectedPathStyle === 'undirected-solid' ? 'active' : ''}>1</kbd> <span className={selectedPathStyle === 'undirected-solid' ? 'active-path-style' : ''}>solid</span> · <kbd className={selectedPathStyle === 'undirected-dash' ? 'active' : ''}>2</kbd> <span className={selectedPathStyle === 'undirected-dash' ? 'active-path-style' : ''}>dash</span> · <kbd className={selectedPathStyle === 'directed-way1' ? 'active' : ''}>3</kbd> <span className={selectedPathStyle === 'directed-way1' ? 'active-path-style' : ''}>one-way</span> · <kbd className={selectedPathStyle === 'directed-way2' ? 'active' : ''}>4</kbd> <span className={selectedPathStyle === 'directed-way2' ? 'active-path-style' : ''}>other-way</span> · <kbd className={selectedPathStyle === 'bidirectional' ? 'active' : ''}>5</kbd> <span className={selectedPathStyle === 'bidirectional' ? 'active-path-style' : ''}>bothways</span> · <kbd>Backspace</kbd> delete path</button>}</div></section>
 }
